@@ -60,7 +60,7 @@
 
 
 
-#undef DUMP_IMAGE_DETAILS 
+#undef DUMP_IMAGE_DETAILS
 #undef IO_GIFDEBUG
 
 #define MAXCOLORMAPSIZE  256
@@ -89,6 +89,25 @@ enum {
 	GIF_GET_LZW,
 	GIF_DONE
 };
+
+
+typedef enum _GifResultType
+{
+  GIF_RESULT_OKAY,
+  GIF_RESULT_OKAY_BYTE,
+  GIF_RESULT_MORE_BYTES,
+  GIF_RESULT_FAILURE,
+  GIF_RESULT_TO_MAINLOOP,
+} GifResultType;
+
+typedef struct _GifResult {
+        GifResultType type;
+        guchar byte_value;
+        /* guint more_bytes; */
+        char* buffer;
+        const char* message;
+} GifResult;
+
 
 
 typedef struct _Gif89 Gif89;
@@ -218,10 +237,10 @@ gif_read (GifContext *context, guchar *buffer, size_t len)
                         g_set_error (context->error,
                                      G_FILE_ERROR,
                                      g_file_error_from_errno (save_errno),
-                                     _("Failure reading GIF: %s"), 
+                                     _("Failure reading GIF: %s"),
                                      g_strerror (save_errno));
                 }
-                
+
 #ifdef IO_GIFDEBUG
 		if (len < 100) {
 			for (i = 0; i < len; i++)
@@ -229,7 +248,7 @@ gif_read (GifContext *context, guchar *buffer, size_t len)
 		}
 		g_print ("\n");
 #endif
-                
+
 		return retval;
 	} else {
 #ifdef IO_GIFDEBUG
@@ -272,14 +291,14 @@ gif_set_get_colormap2 (GifContext *context)
 	context->state = GIF_GET_COLORMAP2;
 }
 
-static gint
+static GifResult
 gif_get_colormap (GifContext *context)
 {
 	unsigned char rgb[3];
 
 	while (context->global_colormap_size < context->global_bit_pixel) {
 		if (!gif_read (context, rgb, sizeof (rgb))) {
-			return -1;
+                        return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 		}
 
 		context->global_color_map[0][context->global_colormap_size] = rgb[0];
@@ -295,18 +314,18 @@ gif_get_colormap (GifContext *context)
 		context->global_colormap_size ++;
 	}
 
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 
-static gint
+static GifResult
 gif_get_colormap2 (GifContext *context)
 {
 	unsigned char rgb[3];
 
 	while (context->frame_colormap_size < context->frame_bit_pixel) {
 		if (!gif_read (context, rgb, sizeof (rgb))) {
-			return -1;
+			return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 		}
 
 		context->frame_color_map[0][context->frame_colormap_size] = rgb[0];
@@ -316,10 +335,11 @@ gif_get_colormap2 (GifContext *context)
 		context->frame_colormap_size ++;
 	}
 
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};;
 }
 
 /*
+ * FIXME: Adapt comment
  * in order for this function to work, we need to perform some black magic.
  * We want to return -1 to let the calling function know, as before, that it needs
  * more bytes.  If we return 0, we were able to successfully read all block->count bytes.
@@ -330,7 +350,7 @@ gif_get_colormap2 (GifContext *context)
  * within a context, and cannot be 0 the second time it's called.
  */
 
-static int
+static GifResult
 get_data_block (GifContext *context,
 		unsigned char *buf,
 		gint *empty_block)
@@ -338,21 +358,21 @@ get_data_block (GifContext *context,
 
 	if (context->block_count == 0) {
 		if (!gif_read (context, &context->block_count, 1)) {
-			return -1;
+			return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 		}
 	}
 
 	if (context->block_count == 0)
 		if (empty_block) {
 			*empty_block = TRUE;
-			return 0;
+			return (GifResult) {.type = GIF_RESULT_OKAY};
 		}
 
 	if (!gif_read (context, buf, context->block_count)) {
-		return -1;
+		return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 	}
 
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 static void
@@ -365,10 +385,10 @@ gif_set_get_extension (GifContext *context)
 	context->block_ptr = 0;
 }
 
-static int
+static GifResult
 gif_get_extension (GifContext *context)
 {
-	gint retval;
+	GifResult retval;
 	gint empty_block = FALSE;
 
 	if (context->extension_flag) {
@@ -376,14 +396,14 @@ gif_get_extension (GifContext *context)
 			/* I guess bad things can happen if we have an extension of 0 )-: */
 			/* I should look into this sometime */
 			if (!gif_read (context, & context->extension_label , 1)) {
-				return -1;
+				return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 			}
 		}
 
 		switch (context->extension_label) {
                 case 0xf9:			/* Graphic Control Extension */
                         retval = get_data_block (context, (unsigned char *) context->block_buf, NULL);
-			if (retval != 0)
+			if (retval.type != GIF_RESULT_OKAY)
 				return retval;
 
 			if (context->frame == NULL) {
@@ -393,7 +413,7 @@ gif_get_extension (GifContext *context)
 				context->gif89.disposal = (context->block_buf[0] >> 2) & 0x7;
 				context->gif89.input_flag = (context->block_buf[0] >> 1) & 0x1;
 				context->gif89.delay_time = LM_to_uint (context->block_buf[1], context->block_buf[2]);
-				
+
 				if ((context->block_buf[0] & 0x1) != 0) {
 					context->gif89.transparent = context->block_buf[3];
 				} else {
@@ -406,9 +426,9 @@ gif_get_extension (GifContext *context)
 			context->extension_flag = FALSE;
 			break;
                 case 0xff: /* application extension */
-                        if (!context->in_loop_extension) { 
+                        if (!context->in_loop_extension) {
                                 retval = get_data_block (context, (unsigned char *) context->block_buf, NULL);
-                                if (retval != 0)
+                                if (retval.type != GIF_RESULT_OKAY)
                                         return retval;
                                 if (!strncmp ((gchar *)context->block_buf, "NETSCAPE2.0", 11) ||
                                     !strncmp ((gchar *)context->block_buf, "ANIMEXTS1.0", 11)) {
@@ -419,11 +439,11 @@ gif_get_extension (GifContext *context)
                         if (context->in_loop_extension) {
                                 do {
                                         retval = get_data_block (context, (unsigned char *) context->block_buf, &empty_block);
-                                        if (retval != 0)
+                                        if (retval.type != GIF_RESULT_OKAY)
                                                 return retval;
                                         if (context->block_buf[0] == 0x01) {
                                                 context->animation->loop = context->block_buf[1] + (context->block_buf[2] << 8);
-                                                if (context->animation->loop != 0) 
+                                                if (context->animation->loop != 0)
                                                         context->animation->loop++;
                                         }
                                         context->block_count = 0;
@@ -431,9 +451,9 @@ gif_get_extension (GifContext *context)
                                 while (!empty_block);
                                 context->in_loop_extension = FALSE;
                                 context->extension_flag = FALSE;
-                                return 0;
+                                return (GifResult) {.type = GIF_RESULT_OKAY};
                         }
-			break;                          
+			break;
 		default:
 			/* Unhandled extension */
 			break;
@@ -442,12 +462,12 @@ gif_get_extension (GifContext *context)
 	/* read all blocks, until I get an empty block, in case there was an extension I didn't know about. */
 	do {
 		retval = get_data_block (context, (unsigned char *) context->block_buf, &empty_block);
-		if (retval != 0)
+		if (retval.type != GIF_RESULT_OKAY)
 			return retval;
 		context->block_count = 0;
 	} while (!empty_block);
 
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 static int ZeroDataBlock = FALSE;
@@ -483,10 +503,10 @@ gif_set_lzw_fill_buffer (GifContext *context)
 	context->state = GIF_LZW_FILL_BUFFER;
 }
 
-static int
+static GifResult
 gif_lzw_fill_buffer (GifContext *context)
 {
-	gint retval;
+	GifResult retval;
 
 	if (context->code_done) {
 		if (context->code_curbit >= context->code_lastbit) {
@@ -495,7 +515,7 @@ gif_lzw_fill_buffer (GifContext *context)
                                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                              _("GIF file was missing some data (perhaps it was truncated somehow?)"));
 
-			return -2;
+			return (GifResult) {.type = GIF_RESULT_FAILURE};
 		}
                 /* Is this supposed to be an error or what? */
 		/* g_message ("trying to read more data after we've done stuff\n"); */
@@ -504,17 +524,18 @@ gif_lzw_fill_buffer (GifContext *context)
                              GDK_PIXBUF_ERROR_FAILED,
                              _("Internal error in the GIF loader (%s)"),
                              G_STRLOC);
-                
-		return -2;
+
+		return (GifResult) {.type = GIF_RESULT_FAILURE};
 	}
+
 
 	context->block_buf[0] = context->block_buf[context->code_last_byte - 2];
 	context->block_buf[1] = context->block_buf[context->code_last_byte - 1];
 
 	retval = get_data_block (context, &context->block_buf[2], NULL);
 
-	if (retval == -1)
-		return -1;
+	if (retval.type == GIF_RESULT_MORE_BYTES)
+		return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 
 	if (context->block_count == 0)
 		context->code_done = TRUE;
@@ -524,10 +545,10 @@ gif_lzw_fill_buffer (GifContext *context)
 	context->code_lastbit = (2 + context->block_count) * 8;
 
 	context->state = context->old_state;
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
-static int
+static GifResult
 get_code (GifContext *context,
 	  int   code_size)
 {
@@ -535,7 +556,9 @@ get_code (GifContext *context,
 
 	if ((context->code_curbit + code_size) >= context->code_lastbit){
 		gif_set_lzw_fill_buffer (context);
-		return -3;
+                GifResult result;
+                result.type = GIF_RESULT_TO_MAINLOOP;
+		return result;
 	}
 
 	ret = 0;
@@ -544,7 +567,10 @@ get_code (GifContext *context,
 
 	context->code_curbit += code_size;
 
-	return ret;
+	GifResult result;
+    result.type = GIF_RESULT_OKAY_BYTE;
+    result.byte_value = ret;
+    return result;
 }
 
 
@@ -555,19 +581,23 @@ set_gif_lzw_clear_code (GifContext *context)
 	context->lzw_code_pending = -1;
 }
 
-static int
+static GifResult
 gif_lzw_clear_code (GifContext *context)
 {
-	gint code;
+	GifResult code;
 
 	code = get_code (context, context->lzw_code_size);
-	if (code == -3)
-		return -0;
+	if (code.type == GIF_RESULT_TO_MAINLOOP) {
+                GifResult result = {.type = GIF_RESULT_OKAY};
+		return result;
+        }
 
-	context->lzw_firstcode = context->lzw_oldcode = code;
-	context->lzw_code_pending = code;
+    g_assert (code.type == GIF_RESULT_OKAY_BYTE);
+	context->lzw_firstcode = context->lzw_oldcode = code.byte_value;
+	context->lzw_code_pending = code.byte_value;
 	context->state = GIF_GET_LZW;
-	return 0;
+    GifResult result = {.type = GIF_RESULT_OKAY};
+    return result;
 }
 
 #define CHECK_LZW_SP() G_STMT_START {                                           \
@@ -577,43 +607,48 @@ gif_lzw_clear_code (GifContext *context)
                                       GDK_PIXBUF_ERROR,                         \
                                       GDK_PIXBUF_ERROR_CORRUPT_IMAGE,           \
                                       _("Stack overflow"));                     \
-                return -2;                                                      \
+                GifResult ret = {.type = GIF_RESULT_FAILURE};                   \
+                return ret;                                                    \
         }                                                                       \
 } G_STMT_END
 
-static int
+static GifResult
 lzw_read_byte (GifContext *context)
 {
 	int code, incode;
-	gint retval;
-	gint my_retval;
+	/* GifResult retval; */
 	register int i;
 
 	if (context->lzw_code_pending != -1) {
-		retval = context->lzw_code_pending;
+                GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = context->lzw_code_pending};
 		context->lzw_code_pending = -1;
-		return retval;
+		return ret;
 	}
 
 	if (context->lzw_fresh) {
 		context->lzw_fresh = FALSE;
 		do {
-			retval = get_code (context, context->lzw_code_size);
-			if (retval < 0) {
-				return retval;
+			GifResult res = get_code (context, context->lzw_code_size);
+			if (res.type == GIF_RESULT_OKAY_BYTE) {
+                context->lzw_firstcode = context->lzw_oldcode = res.byte_value;
+            } else {
+                g_assert (res.type != GIF_RESULT_OKAY);
+				return res;
 			}
-
-			context->lzw_firstcode = context->lzw_oldcode = retval;
 		} while (context->lzw_firstcode == context->lzw_clear_code);
-		return context->lzw_firstcode;
+
+                GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = context->lzw_firstcode};
+                return ret;
 	}
 
 	if (context->lzw_sp > context->lzw_stack) {
-		my_retval = *--(context->lzw_sp);
-		return my_retval;
+                GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = *--(context->lzw_sp)};
+                return ret;
 	}
 
-	while ((code = get_code (context, context->lzw_code_size)) >= 0) {
+        GifResult r;
+	while ((r = get_code (context, context->lzw_code_size)).type == GIF_RESULT_OKAY_BYTE) {
+		code = r.byte_value;
 		if (code == context->lzw_clear_code) {
 			for (i = 0; i < context->lzw_clear_code; ++i) {
 				context->lzw_table[0][i] = 0;
@@ -627,7 +662,8 @@ lzw_read_byte (GifContext *context)
 			context->lzw_sp = context->lzw_stack;
 
 			set_gif_lzw_clear_code (context);
-			return -3;
+                        GifResult ret = {.type = GIF_RESULT_TO_MAINLOOP};
+			return ret;
 		} else if (code == context->lzw_end_code) {
 			int count;
 			unsigned char buf[260];
@@ -637,10 +673,12 @@ lzw_read_byte (GifContext *context)
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_FAILED,
                                              _("GIF image loader cannot understand this image."));
-                        return -2;
-                        
+                        GifResult ret = {.type = GIF_RESULT_FAILURE};
+                        return ret;
+
 			if (ZeroDataBlock) {
-				return -2;
+                                GifResult ret = {.type = GIF_RESULT_FAILURE};
+                                return ret;
 			}
 
 			while ((count = GetDataBlock (context, buf)) > 0)
@@ -648,9 +686,11 @@ lzw_read_byte (GifContext *context)
 
 			if (count != 0) {
 				/*g_print (_("GIF: missing EOD in data stream (common occurence)"));*/
-				return -2;
+                                GifResult ret = {.type = GIF_RESULT_FAILURE};
+                                return ret;
 			}
-		}
+
+        }
 
 		incode = code;
 
@@ -666,7 +706,8 @@ lzw_read_byte (GifContext *context)
                                                      GDK_PIXBUF_ERROR,
                                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                                      _("Bad code encountered"));
-				return -2;
+                                GifResult ret = {.type = GIF_RESULT_FAILURE};
+                                return ret;
                         }
                         CHECK_LZW_SP ();
 			*(context->lzw_sp)++ = context->lzw_table[1][code];
@@ -676,7 +717,7 @@ lzw_read_byte (GifContext *context)
                                                      GDK_PIXBUF_ERROR,
                                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                                      _("Circular table entry in GIF file"));
-				return -2;
+                                return (GifResult) {.type = GIF_RESULT_FAILURE};
 			}
 			code = context->lzw_table[0][code];
 		}
@@ -698,11 +739,14 @@ lzw_read_byte (GifContext *context)
 		context->lzw_oldcode = incode;
 
 		if (context->lzw_sp > context->lzw_stack) {
-			my_retval = *--(context->lzw_sp);
-			return my_retval;
+                        GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = *--(context->lzw_sp)};
+                        return ret;
 		}
 	}
-	return code;
+	g_assert (r.type != GIF_RESULT_OKAY);
+
+    GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = code};
+	return ret;
 }
 
 static void
@@ -724,7 +768,7 @@ gif_fill_in_pixels (GifContext *context, guchar *dest, gint offset, guchar v)
                 cmap = context->frame_color_map;
         else
                 cmap = context->global_color_map;
-        
+
 	if (context->gif89.transparent != -1) {
 		pixel = dest + (context->draw_ypos + offset) * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
 		*pixel = cmap [0][(guchar) v];
@@ -776,14 +820,14 @@ gif_fill_in_lines (GifContext *context, guchar *dest, guchar v)
 
 /* Clips a rectancle to the base dimensions. Returns TRUE if the clipped rectangle is non-empty. */
 static gboolean
-clip_frame (GifContext *context, 
-            gint       *x, 
-            gint       *y, 
-            gint       *width, 
+clip_frame (GifContext *context,
+            gint       *x,
+            gint       *y,
+            gint       *width,
             gint       *height)
 {
         gint orig_x, orig_y;
-        
+
         orig_x = *x;
         orig_y = *y;
 	*x = MAX (0, *x);
@@ -813,12 +857,12 @@ maybe_update (GifContext *context,
               gint        height)
 {
         if (clip_frame (context, &x, &y, &width, &height))
-                (*context->update_func) (context->frame->pixbuf, 
+                (*context->update_func) (context->frame->pixbuf,
                                          x, y, width, height,
                                          context->user_data);
 }
 
-static int
+static GifResult
 gif_get_lzw (GifContext *context)
 {
 	guchar *dest, *temp;
@@ -832,7 +876,7 @@ gif_get_lzw (GifContext *context)
 
                 context->frame->composited = NULL;
                 context->frame->revert = NULL;
-                
+
                 if (context->frame_len == 0 || context->frame_height == 0) {
                         /* An empty frame, we just output a single transparent
                          * pixel at (0, 0).
@@ -864,13 +908,14 @@ gif_get_lzw (GifContext *context)
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_INSUFFICIENT_MEMORY,
                                              _("Not enough memory to load GIF file"));
-                        return -2;
+                        GifResult ret = {.type = GIF_RESULT_FAILURE};
+                        return ret;
                 }
 
                 context->frame->x_offset = context->x_offset;
                 context->frame->y_offset = context->y_offset;
                 context->frame->need_recomposite = TRUE;
-                
+
                 /* GIF delay is in hundredths, we want thousandths */
                 context->frame->delay_time = context->gif89.delay_time * 10;
 
@@ -885,10 +930,10 @@ gif_get_lzw (GifContext *context)
                  */
                 if (context->frame->delay_time < 20)
                         context->frame->delay_time = 20; /* 20 = "fast" */
-                
+
                 context->frame->elapsed = context->animation->total_time;
-                context->animation->total_time += context->frame->delay_time;                
-                
+                context->animation->total_time += context->frame->delay_time;
+
                 switch (context->gif89.disposal) {
                 case 0:
                 case 1:
@@ -906,12 +951,12 @@ gif_get_lzw (GifContext *context)
                 }
 
                 context->frame->bg_transparent = (context->gif89.transparent == context->background_index);
-                
+
                 context->animation->n_frames ++;
                 context->animation->frames = g_list_append (context->animation->frames, context->frame);
 
                 /* Only call prepare_func for the first frame */
-		if (context->animation->frames->next == NULL) { 
+		if (context->animation->frames->next == NULL) {
                         if (context->animation->width == 0 )
                                 context->animation->width = gdk_pixbuf_get_width(context->frame->pixbuf);
                         if (context->animation->height == 0)
@@ -926,7 +971,7 @@ gif_get_lzw (GifContext *context)
                         GList *link;
                         GdkPixbufFrame *prev_frame;
                         gint x, y, w, h;
-                        
+
                         link = g_list_find (context->animation->frames, context->frame);
 
                         prev_frame = link->prev->data;
@@ -950,17 +995,18 @@ gif_get_lzw (GifContext *context)
                                         }
                                         link = link->next;
                                 }
-                                
+
                                 g_list_free (context->animation->frames);
                                 context->animation->frames = NULL;
-                                
+
                                 g_set_error_literal (context->error,
                                                      GDK_PIXBUF_ERROR,
                                                      GDK_PIXBUF_ERROR_INSUFFICIENT_MEMORY,
                                                      _("Not enough memory to composite a frame in GIF file"));
-                                return -2;
+                                GifResult ret = {.type = GIF_RESULT_FAILURE};
+                                return ret;
                         }
-                    
+
                         x = context->frame->x_offset;
                         y = context->frame->y_offset;
                         w = gdk_pixbuf_get_width (context->frame->pixbuf);
@@ -986,26 +1032,27 @@ gif_get_lzw (GifContext *context)
                         cmap = context->frame_color_map;
                 else
                         cmap = context->global_color_map;
-                
-		v = lzw_read_byte (context);
-		if (v < 0) {
+
+		GifResult read_result = lzw_read_byte (context);
+		if (read_result.type != GIF_RESULT_OKAY_BYTE) {
 			goto finished_data;
 		}
+        v = read_result.byte_value;
 		bound_flag = TRUE;
 
-                g_assert (gdk_pixbuf_get_has_alpha (context->frame->pixbuf));
-                
-                temp = dest + context->draw_ypos * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
-                *temp = cmap [0][(guchar) v];
-                *(temp+1) = cmap [1][(guchar) v];
-                *(temp+2) = cmap [2][(guchar) v];
-                *(temp+3) = (guchar) ((v == context->gif89.transparent) ? 0 : 255);
+        g_assert (gdk_pixbuf_get_has_alpha (context->frame->pixbuf));
+
+        temp = dest + context->draw_ypos * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
+        *temp = cmap [0][(guchar) v];
+        *(temp+1) = cmap [1][(guchar) v];
+        *(temp+2) = cmap [2][(guchar) v];
+        *(temp+3) = (guchar) ((v == context->gif89.transparent) ? 0 : 255);
 
 		if (context->prepare_func && context->frame_interlace)
 			gif_fill_in_lines (context, dest, v);
 
 		context->draw_xpos++;
-                
+
 		if (context->draw_xpos == context->frame_len) {
 			context->draw_xpos = 0;
 			if (context->frame_interlace) {
@@ -1046,7 +1093,7 @@ gif_get_lzw (GifContext *context)
 					lower_bound = 0;
 					upper_bound = context->frame_height;
 				} else {
-                                        
+
 				}
 			} else
 				upper_bound = context->draw_ypos;
@@ -1062,10 +1109,10 @@ gif_get_lzw (GifContext *context)
         v = 0;
 
  finished_data:
-        
+
         if (bound_flag)
                 context->frame->need_recomposite = TRUE;
-        
+
 	if (bound_flag && context->update_func) {
 		if (lower_bound <= upper_bound && first_pass == context->draw_pass) {
                         maybe_update (context,
@@ -1105,8 +1152,9 @@ gif_get_lzw (GifContext *context)
                 if (context->stop_after_first_frame)
                         context->state =  GIF_DONE;
 	}
-	
-	return v;
+
+	GifResult res = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = v};
+        return res;
 }
 
 static void
@@ -1115,22 +1163,23 @@ gif_set_prepare_lzw (GifContext *context)
 	context->state = GIF_PREPARE_LZW;
 	context->lzw_code_pending = -1;
 }
-static int
+static GifResult
 gif_prepare_lzw (GifContext *context)
 {
 	gint i;
 
 	if (!gif_read (context, &(context->lzw_set_code_size), 1)) {
 		/*g_message (_("GIF: EOF / read error on image data\n"));*/
-		return -1;
+		return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 	}
-        
+
         if (context->lzw_set_code_size > MAX_LZW_BITS) {
                 g_set_error_literal (context->error,
                                      GDK_PIXBUF_ERROR,
                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                      _("GIF image is corrupt (incorrect LZW compression)"));
-                return -2;
+                        GifResult ret = {.type = GIF_RESULT_FAILURE};
+                        return ret;
         }
 
 	context->lzw_code_size = context->lzw_set_code_size + 1;
@@ -1144,7 +1193,7 @@ gif_prepare_lzw (GifContext *context)
 	context->code_last_byte = 0;
 	context->code_done = FALSE;
 
-        g_assert (context->lzw_clear_code <= 
+        g_assert (context->lzw_clear_code <=
                   G_N_ELEMENTS (context->lzw_table[0]));
 
 	for (i = 0; i < context->lzw_clear_code; ++i) {
@@ -1157,11 +1206,11 @@ gif_prepare_lzw (GifContext *context)
 	context->lzw_sp = context->lzw_stack;
 	gif_set_get_lzw (context);
 
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 /* needs 13 bytes to proceed. */
-static gint
+static GifResult
 gif_init (GifContext *context)
 {
 	unsigned char buf[16];
@@ -1171,7 +1220,7 @@ gif_init (GifContext *context)
 		/* Unable to read magic number,
                  * gif_read() should have set error
                  */
-		return -1;
+                return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 	}
 
 	if (strncmp ((char *) buf, "GIF", 3) != 0) {
@@ -1180,7 +1229,7 @@ gif_init (GifContext *context)
                                      GDK_PIXBUF_ERROR,
                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                      _("File does not appear to be a GIF file"));
-		return -2;
+                        return (GifResult) {.type = GIF_RESULT_FAILURE};
 	}
 
 	strncpy (version, (char *) buf + 3, 3);
@@ -1193,13 +1242,13 @@ gif_init (GifContext *context)
                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                              _("Version %s of the GIF file format is not supported"),
                              version);
-		return -2;
+                        return (GifResult) {.type = GIF_RESULT_FAILURE};
 	}
 
 	/* read the screen descriptor */
 	if (!gif_read (context, buf, 7)) {
 		/* Failed to read screen descriptor, error set */
-		return -1;
+		return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 	}
 
 	context->width = LM_to_uint (buf[0], buf[1]);
@@ -1239,7 +1288,8 @@ gif_init (GifContext *context)
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                              _("Resulting GIF image has zero size"));
-                        return -2;
+                        GifResult ret = {.type = GIF_RESULT_FAILURE};
+                        return ret;
                 }
         }
 
@@ -1253,8 +1303,8 @@ gif_init (GifContext *context)
         g_print (">Image width: %d height: %d global_cmap: %d background: %d\n",
                  context->width, context->height, context->has_global_cmap, context->background_index);
 #endif
-        
-	return 0;
+
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 static void
@@ -1263,15 +1313,14 @@ gif_set_get_frame_info (GifContext *context)
 	context->state = GIF_GET_FRAME_INFO;
 }
 
-static gint
+static GifResult
 gif_get_frame_info (GifContext *context)
 {
 	unsigned char buf[9];
-        
-	if (!gif_read (context, buf, 9)) {
-		return -1;
-	}
-        
+
+	if (!gif_read (context, buf, 9))
+                return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
+
 	/* Okay, we got all the info we need.  Lets record it */
 	context->frame_len = LM_to_uint (buf[4], buf[5]);
 	context->frame_height = LM_to_uint (buf[6], buf[7]);
@@ -1293,13 +1342,13 @@ gif_get_frame_info (GifContext *context)
                  context->frame_len, context->frame_height, context->x_offset, context->y_offset,
                  context->gif89.disposal, context->gif89.delay_time, context->gif89.transparent, context->frame_interlace);
 #endif
-        
+
 	if (BitSet (buf[8], LOCALCOLORMAP)) {
 
 #ifdef DUMP_IMAGE_DETAILS
                 g_print (">has local colormap\n");
 #endif
-                
+
 		/* Does this frame have it's own colormap. */
 		/* really only relevant when looking at the first frame
 		 * of an animated gif. */
@@ -1308,45 +1357,46 @@ gif_get_frame_info (GifContext *context)
                 context->frame_cmap_active = TRUE;
 		context->frame_bit_pixel = 1 << ((buf[8] & 0x07) + 1);
 		gif_set_get_colormap2 (context);
-		return 0;
+		return (GifResult) {.type = GIF_RESULT_OKAY};
 	}
 
         if (!context->has_global_cmap) {
                 context->state = GIF_DONE;
-                
+
                 g_set_error_literal (context->error,
                                      GDK_PIXBUF_ERROR,
                                      GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                      _("GIF image has no global colormap, and a frame inside it has no local colormap."));
-                
-		return -2;
+
+                        GifResult ret = {.type = GIF_RESULT_FAILURE};
+                        return ret;
         }
 
 	gif_set_prepare_lzw (context);
-	return 0;
+	return (GifResult) {.type = GIF_RESULT_OKAY};
 
 }
 
-static gint
+static GifResult
 gif_get_next_step (GifContext *context)
 {
 	unsigned char c;
 	while (TRUE) {
 		if (!gif_read (context, &c, 1)) {
-			return -1;
+			return (GifResult) {.type = GIF_RESULT_MORE_BYTES};
 		}
 		if (c == ';') {
 			/* GIF terminator */
 			/* hmm.  Not 100% sure what to do about this.  Should
 			 * i try to return a blank image instead? */
 			context->state = GIF_DONE;
-			return 0;
+			return (GifResult) {.type = GIF_RESULT_OKAY};
 		}
 
 		if (c == '!') {
 			/* Check the extension */
 			gif_set_get_extension (context);
-			return 0;
+			return (GifResult) {.type = GIF_RESULT_OKAY};
 		}
 
 		/* look for frame */
@@ -1356,17 +1406,20 @@ gif_get_next_step (GifContext *context)
 		}
 		/* load the frame */
 		gif_set_get_frame_info (context);
-		return 0;
+		return (GifResult) {.type = GIF_RESULT_OKAY};
 	}
 }
 
 
 #define LOG(x) /* g_print ("%s: %s\n", G_STRLOC, x); */
 
-static gint
+
+
+
+static GifResult
 gif_main_loop (GifContext *context)
 {
-	gint retval = 0;
+	GifResult retval = {.type = GIF_RESULT_OKAY};
 
 	do {
 		switch (context->state) {
@@ -1378,7 +1431,7 @@ gif_main_loop (GifContext *context)
 		case GIF_GET_COLORMAP:
                         LOG("get_colormap\n");
 			retval = gif_get_colormap (context);
-			if (retval == 0)
+			if (retval.type == GIF_RESULT_OKAY)
 				context->state = GIF_GET_NEXT_STEP;
 			break;
 
@@ -1395,14 +1448,14 @@ gif_main_loop (GifContext *context)
 		case GIF_GET_EXTENSION:
                         LOG("get_extension\n");
 			retval = gif_get_extension (context);
-			if (retval == 0)
+			if (retval.type == GIF_RESULT_OKAY)
 				context->state = GIF_GET_NEXT_STEP;
 			break;
 
 		case GIF_GET_COLORMAP2:
                         LOG("get_colormap2\n");
 			retval = gif_get_colormap2 (context);
-			if (retval == 0)
+			if (retval.type == GIF_RESULT_OKAY)
 				gif_set_prepare_lzw (context);
 			break;
 
@@ -1430,10 +1483,10 @@ gif_main_loop (GifContext *context)
                         LOG("done\n");
                         /* fall through */
 		default:
-			retval = 0;
+			retval = (GifResult) {.type = GIF_RESULT_OKAY};
 			goto done;
 		};
-	} while ((retval == 0) || (retval == -3));
+	} while ((retval.type == GIF_RESULT_OKAY) || (retval.type == GIF_RESULT_TO_MAINLOOP));
  done:
 	return retval;
 }
@@ -1448,7 +1501,7 @@ new_context (void)
                 return NULL;
 
         memset (context, 0, sizeof (GifContext));
-        
+
         context->animation = g_object_new (GDK_TYPE_PIXBUF_GIF_ANIM, NULL);
 	context->frame = NULL;
 	context->file = NULL;
@@ -1476,7 +1529,7 @@ gdk_pixbuf__gif_image_load (FILE *file, GError **error)
 {
 	GifContext *context;
 	GdkPixbuf *pixbuf;
-        gint retval;
+        GifResult retval;
 
 	g_return_val_if_fail (file != NULL, NULL);
 
@@ -1489,24 +1542,24 @@ gdk_pixbuf__gif_image_load (FILE *file, GError **error)
                                      _("Not enough memory to load GIF file"));
                 return NULL;
         }
-        
+
 	context->file = file;
         context->error = error;
         context->stop_after_first_frame = TRUE;
 
         retval = gif_main_loop (context);
-	if (retval == -1 || context->animation->frames == NULL) {
+	if (retval.type == GIF_RESULT_MORE_BYTES || context->animation->frames == NULL) {
                 if (context->error && *(context->error) == NULL)
                         g_set_error_literal (context->error,
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
                                              _("GIF file was missing some data (perhaps it was truncated somehow?)"));
         }
-        else if (retval == -2) {
+        else if (retval.type == GIF_RESULT_FAILURE) {
                 pixbuf = NULL;
                 goto out;
         }
-        
+
         pixbuf = gdk_pixbuf_animation_get_static_image (GDK_PIXBUF_ANIMATION (context->animation));
 
         if (pixbuf)
@@ -1514,10 +1567,10 @@ gdk_pixbuf__gif_image_load (FILE *file, GError **error)
 
 out:
         g_object_unref (context->animation);
-        
+
         g_free (context->buf);
 	g_free (context);
- 
+
 	return pixbuf;
 }
 
@@ -1542,7 +1595,7 @@ gdk_pixbuf__gif_image_begin_load (GdkPixbufModuleSizeFunc size_func,
                                      _("Not enough memory to load GIF file"));
                 return NULL;
         }
-        
+
         context->error = error;
 	context->size_func = size_func;
 	context->prepare_func = prepare_func;
@@ -1557,7 +1610,7 @@ gdk_pixbuf__gif_image_stop_load (gpointer data, GError **error)
 {
 	GifContext *context = (GifContext *) data;
         gboolean retval = TRUE;
-        
+
         if (context->animation->frames == NULL) {
                 g_set_error_literal (error,
                                      GDK_PIXBUF_ERROR,
@@ -1587,11 +1640,11 @@ gdk_pixbuf__gif_image_load_increment (gpointer data,
                                       const guchar *buf, guint size,
                                       GError **error)
 {
-	gint retval;
+	GifResult retval;
 	GifContext *context = (GifContext *) data;
 
         context->error = error;
-        
+
 	if (context->amount_needed == 0) {
 		/* we aren't looking for some bytes. */
 		/* we can use buf now, but we don't want to keep it around at all.
@@ -1619,12 +1672,12 @@ gdk_pixbuf__gif_image_load_increment (gpointer data,
 
 	retval = gif_main_loop (context);
 
-	if (retval == -2) {
+	if (retval.type == GIF_RESULT_FAILURE) {
 		if (context->buf == buf)
                         context->buf = NULL;
 		return FALSE;
         }
-	if (retval == -1) {
+	if (retval.type == GIF_RESULT_MORE_BYTES) {
 		/* we didn't have enough memory */
 		/* prepare for the next image_load_increment */
 		if (context->buf == buf) {
@@ -1665,11 +1718,11 @@ gdk_pixbuf__gif_image_load_animation (FILE *file,
                                      _("Not enough memory to load GIF file"));
                 return NULL;
         }
-        
+
         context->error = error;
 	context->file = file;
 
-	if (gif_main_loop (context) == -1 || context->animation->frames == NULL) {
+	if ((gif_main_loop (context).type == GIF_RESULT_MORE_BYTES) || context->animation->frames == NULL) {
                 if (context->error && *(context->error) == NULL)
                         g_set_error_literal (context->error,
                                              GDK_PIXBUF_ERROR,
@@ -1687,7 +1740,7 @@ gdk_pixbuf__gif_image_load_animation (FILE *file,
 
         if (context->error && *(context->error))
                 g_print ("%s\n", (*(context->error))->message);
-        
+
         g_free (context->buf);
 	g_free (context);
 	return animation;

@@ -205,7 +205,7 @@ static gboolean gdk_pixbuf__bmp_image_load_increment(gpointer data,
 static int
 lsb_32 (guchar *src)
 {
-	return src[0] | (src[1] << 8) | (src[2] << 16) | (src[3] << 24);
+	return src[0] | (src[1] << 8) | (src[2] << 16) | ((unsigned) (src[3]) << 24);
 }
 
 /* Same as above, but for 16-bit little-endian integers. */

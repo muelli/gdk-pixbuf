@@ -43,6 +43,7 @@ test_fail_size (GFile *file,
     }
 
   filename = g_file_get_path (file);
+  printf ("reading %s\n", filename);
 
   success = g_file_load_contents (file, NULL, (gchar **) &contents, &contents_length, NULL, &error);
   g_assert_no_error (error);
