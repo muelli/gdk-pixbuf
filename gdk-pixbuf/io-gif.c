@@ -570,6 +570,7 @@ get_code (GifContext *context,
 	GifResult result;
     result.type = GIF_RESULT_OKAY_BYTE;
     result.byte_value = ret;
+    g_assert (ret >= 0);
     return result;
 }
 
