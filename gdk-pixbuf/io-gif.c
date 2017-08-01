@@ -615,6 +615,8 @@ gif_lzw_clear_code (GifContext *context)
 static GifResult
 lzw_read_byte (GifContext *context)
 {
+    static int counter = 0;
+    printf ("calling lzw_read_byte: %d\n", counter++);
 	int code, incode;
 	/* GifResult retval; */
 	register int i;
@@ -633,6 +635,8 @@ lzw_read_byte (GifContext *context)
                 context->lzw_firstcode = context->lzw_oldcode = res.byte_value;
             } else {
                 g_assert (res.type != GIF_RESULT_OKAY);
+                g_assert (res.type == GIF_RESULT_TO_MAINLOOP);
+                printf ("Bailing out... %d\n", res.type);
 				return res;
 			}
 		} while (context->lzw_firstcode == context->lzw_clear_code);
