@@ -1173,6 +1173,7 @@ gif_init (GifContext *context)
 {
 	unsigned char buf[16];
 	char version[4];
+	gint width, height;
 
 	if (!gif_read (context, buf, 6)) {
 		/* Unable to read magic number,
@@ -1233,21 +1234,15 @@ gif_init (GifContext *context)
         if (!(context->width <= G_MAXINT)) {
             g_warning ("Expected context->width <= G_MAXINT: %u\n", context->width);
         }
-        context->animation->width = (int) context->width;
+        context->animation->width = width = (int) context->width;
 
         if (!(context->height <= G_MAXINT)) {
             g_warning ("Expected context->height <= G_MAXINT: %u\n", context->height);
         }
-        context->animation->height = (int) context->height;
+        context->animation->height = height = (int) context->height;
 
         if (context->size_func) {
-                gint width, height;
-
-                width = context->width;
-                height = context->height;
-
                 (*context->size_func) (&width, &height, context->user_data);
-
                 if (width == 0 || height == 0) {
                         g_set_error (context->error,
                                              GDK_PIXBUF_ERROR,
