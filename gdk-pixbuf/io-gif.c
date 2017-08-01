@@ -1242,10 +1242,10 @@ gif_init (GifContext *context)
                 (*context->size_func) (&width, &height, context->user_data);
 
                 if (width == 0 || height == 0) {
-                        g_set_error_literal (context->error,
+                        g_set_error (context->error,
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
-                                             _("Resulting GIF image has zero size"));
+                                             _("Resulting GIF image has zero size: %dx%d"), height, width);
                         return -2;
                 }
         }
