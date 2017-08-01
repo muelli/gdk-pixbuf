@@ -1230,8 +1230,15 @@ gif_init (GifContext *context)
         context->animation->bg_green = 0;
         context->animation->bg_blue = 0;
 
-        context->animation->width = context->width;
-        context->animation->height = context->height;
+        if (!(context->width <= G_MAXINT)) {
+            g_warning ("Expected context->width <= G_MAXINT: %u\n", context->width);
+        }
+        context->animation->width = (int) context->width;
+
+        if (!(context->height <= G_MAXINT)) {
+            g_warning ("Expected context->height <= G_MAXINT: %u\n", context->height);
+        }
+        context->animation->height = (int) context->height;
 
         if (context->size_func) {
                 gint width, height;
