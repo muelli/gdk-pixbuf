@@ -145,9 +145,9 @@ struct _GifContext
 	GdkPixbufModuleUpdatedFunc update_func;
 	gpointer user_data;
         guchar *buf;
-	guint ptr;
-	guint size;
-	guint amount_needed;
+	size_t ptr;
+	size_t size;
+	size_t amount_needed;
 
 	/* extension context */
 	guchar extension_label;
