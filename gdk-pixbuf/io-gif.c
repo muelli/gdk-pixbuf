@@ -102,7 +102,7 @@ typedef enum _GifResultType
 
 typedef struct _GifResult {
         GifResultType type;
-        guchar byte_value;
+        int byte_value;
         /* guint more_bytes; */
         char* buffer;
         const char* message;
