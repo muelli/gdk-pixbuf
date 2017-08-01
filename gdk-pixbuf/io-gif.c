@@ -71,7 +71,10 @@
 #define BitSet(byte, bit)  (((byte) & (bit)) == (bit))
 #define LM_to_uint(a,b)         (((b)<<8)|(a))
 
+#define G_MINUCHAR          0
+#define G_MAXUCHAR          255
 
+
 
 typedef unsigned char CMap[3][MAXCOLORMAPSIZE];
 
@@ -995,14 +998,18 @@ gif_get_lzw (GifContext *context)
 
                 g_assert (gdk_pixbuf_get_has_alpha (context->frame->pixbuf));
                 
+		        if (!(G_MINUCHAR <= v && v <= G_MAXUCHAR)) {
+			        g_warning ("gif: Expected %d <= %d <= %d\n",  G_MINUCHAR, v, G_MAXUCHAR);
+		        }
+		        guchar b = (guchar) v;
                 temp = dest + context->draw_ypos * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
-                *temp = cmap [0][(guchar) v];
-                *(temp+1) = cmap [1][(guchar) v];
-                *(temp+2) = cmap [2][(guchar) v];
-                *(temp+3) = (guchar) ((v == context->gif89.transparent) ? 0 : 255);
+                *temp = cmap [0][b];
+                *(temp+1) = cmap [1][b];
+                *(temp+2) = cmap [2][b];
+                *(temp+3) = (b == context->gif89.transparent) ? 0 : 255;
 
 		if (context->prepare_func && context->frame_interlace)
-			gif_fill_in_lines (context, dest, v);
+    			gif_fill_in_lines (context, dest, b);
 
 		context->draw_xpos++;
                 
