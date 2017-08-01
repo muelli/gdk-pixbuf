@@ -96,11 +96,11 @@ enum {
 
 typedef enum _GifResultType
 {
-  GIF_RESULT_OKAY,
+  GIF_RESULT_OKAY, /* 0 */
   GIF_RESULT_OKAY_BYTE,
   GIF_RESULT_MORE_BYTES,
   GIF_RESULT_FAILURE,
-  GIF_RESULT_TO_MAINLOOP,
+  GIF_RESULT_TO_MAINLOOP, /* 4 */
 } GifResultType;
 
 typedef struct _GifResult {
@@ -574,6 +574,7 @@ get_code (GifContext *context,
     result.type = GIF_RESULT_OKAY_BYTE;
     result.byte_value = ret;
     g_assert (ret >= 0);
+    printf ("get_code returns: %d\n", ret);
     return result;
 }
 
@@ -656,8 +657,11 @@ lzw_read_byte (GifContext *context)
 	}
 
         GifResult r;
+	//printf ("lzw_code_size: %d\n", context->lzw_code_size);
 	while ((r = get_code (context, context->lzw_code_size)).type == GIF_RESULT_OKAY_BYTE) {
 		code = r.byte_value;
+		printf ("got code: %d\n", code);
+		g_assert (code >= 0);
 		if (code == context->lzw_clear_code) {
 			for (i = 0; i < context->lzw_clear_code; ++i) {
 				context->lzw_table[0][i] = 0;
@@ -706,6 +710,7 @@ lzw_read_byte (GifContext *context)
 		if (code >= context->lzw_max_code) {
                         CHECK_LZW_SP ();
 			*(context->lzw_sp)++ = context->lzw_firstcode;
+			printf ("lzw1: setting code to %d\n", code = context->lzw_oldcode);
 			code = context->lzw_oldcode;
 		}
 
@@ -728,12 +733,14 @@ lzw_read_byte (GifContext *context)
                                                      _("Circular table entry in GIF file"));
                                 return (GifResult) {.type = GIF_RESULT_FAILURE};
 			}
+	    	printf ("lzw: setting code to %d\n", context->lzw_table[0][code]);
 			code = context->lzw_table[0][code];
 		}
 
                 CHECK_LZW_SP ();
 		*(context->lzw_sp)++ = context->lzw_firstcode = context->lzw_table[1][code];
 
+		printf ("lzw max: Setting to: %d\n", context->lzw_max_code);
 		if ((code = context->lzw_max_code) < (1 << MAX_LZW_BITS)) {
 			context->lzw_table[0][code] = context->lzw_oldcode;
 			context->lzw_table[1][code] = context->lzw_firstcode;
@@ -752,9 +759,13 @@ lzw_read_byte (GifContext *context)
                         return ret;
 		}
 	}
+	printf ("Stopped loop with status: %d\n", r.type);
 	g_assert (r.type != GIF_RESULT_OKAY);
 
     GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = code};
+	g_assert (0 <= ret.byte_value);
+	printf ("lzw_read_byte: Returning %d\n", ret.byte_value);
+	g_assert (ret.type != GIF_RESULT_OKAY_BYTE  ||  ret.byte_value <= 255);
 	return ret;
 }
 
@@ -1043,7 +1054,10 @@ gif_get_lzw (GifContext *context)
                 else
                         cmap = context->global_color_map;
 
+		
+		
 		GifResult read_result = lzw_read_byte (context);
+		printf ("read byte returned us: %d: %d\n", read_result.type, read_result.byte_value);
 		if (read_result.type != GIF_RESULT_OKAY_BYTE) {
 			result = read_result;
 			goto finished_data;
@@ -1431,7 +1445,7 @@ gif_get_next_step (GifContext *context)
 }
 
 
-#define LOG(x) g_print ("%s: %s\n", G_STRLOC, x);
+#define LOG(x) g_print ("%s: %s\n", ""/*G_STRLOC*/, x);
 
 
 
@@ -1482,6 +1496,7 @@ gif_main_loop (GifContext *context)
 		case GIF_PREPARE_LZW:
                         LOG("prepare_lzw\n");
 			retval = gif_prepare_lzw (context);
+			printf ("PREP_LZW: t: %d  v: %d\n",  retval.type, retval.byte_value);
 			break;
 
 		case GIF_LZW_FILL_BUFFER:
@@ -1497,14 +1512,17 @@ gif_main_loop (GifContext *context)
 		case GIF_GET_LZW:
                         LOG("get_lzw\n");
 			retval = gif_get_lzw (context);
+			printf ("GET_LZW: t: %d  v: %d\n", retval.type, retval.byte_value);
 			break;
 
 		case GIF_DONE:
                         LOG("done\n");
                         /* fall through */
 		default:
-		    g_assert_not_reached ();
+		    // We do hit this case!!1
+		    // g_assert_not_reached ();
 			retval = (GifResult) {.type = GIF_RESULT_OKAY};
+			// Hrm. Or do we return a byte with "0"..?
 			goto done;
 		};
 	} while ((retval.type == GIF_RESULT_OKAY) || (retval.type == GIF_RESULT_TO_MAINLOOP));
