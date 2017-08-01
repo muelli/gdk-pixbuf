@@ -1217,7 +1217,7 @@ gif_init (GifContext *context)
          * next:     whether colormap is sorted by priority of allocation
          * last 3:   size of colormap
          */
-	context->global_bit_pixel = 2 << (buf[4] & 0x07);
+	context->global_bit_pixel = 2U << (buf[4] & 0x07);
 	context->global_color_resolution = (((buf[4] & 0x70) >> 3) + 1);
         context->has_global_cmap = (buf[4] & 0x80) != 0;
 	context->background_index = buf[5];
@@ -1313,7 +1313,7 @@ gif_get_frame_info (GifContext *context)
 		/* if it does, we need to re-read in the colormap,
 		 * the gray_scale, and the bit_pixel */
                 context->frame_cmap_active = TRUE;
-		context->frame_bit_pixel = 1 << ((buf[8] & 0x07) + 1);
+		context->frame_bit_pixel = 1U << ((buf[8] & 0x07) + 1);
 		gif_set_get_colormap2 (context);
 		return 0;
 	}
