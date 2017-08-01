@@ -622,7 +622,8 @@ lzw_read_byte (GifContext *context)
 	register int i;
 
 	if (context->lzw_code_pending != -1) {
-                GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = context->lzw_code_pending};
+	    g_assert (context->lzw_code_pending >= 0);
+        GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = context->lzw_code_pending};
 		context->lzw_code_pending = -1;
 		return ret;
 	}
