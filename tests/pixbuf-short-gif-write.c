@@ -26,8 +26,9 @@ loader_write_from_channel (GdkPixbufLoader *loader,
     }
     g_assert (read_status == G_IO_STATUS_NORMAL || read_status == G_IO_STATUS_EOF);
 
-    g_assert (gdk_pixbuf_loader_write(loader, buffer, bytes_read, &error));
+    gboolean success = gdk_pixbuf_loader_write(loader, buffer, bytes_read, &error);
     g_assert_no_error (error);
+    g_assert (success);
     g_free(buffer);
     return bytes_read;
 }

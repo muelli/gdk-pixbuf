@@ -71,7 +71,10 @@
 #define BitSet(byte, bit)  (((byte) & (bit)) == (bit))
 #define LM_to_uint(a,b)         (((b)<<8)|(a))
 
+#define G_MINUCHAR          0
+#define G_MAXUCHAR          255
 
+
 
 typedef unsigned char CMap[3][MAXCOLORMAPSIZE];
 
@@ -161,9 +164,9 @@ struct _GifContext
 	GdkPixbufModuleUpdatedFunc update_func;
 	gpointer user_data;
         guchar *buf;
-	guint ptr;
-	guint size;
-	guint amount_needed;
+	size_t ptr;
+	size_t size;
+	size_t amount_needed;
 
 	/* extension context */
 	guchar extension_label;
@@ -1049,16 +1052,21 @@ gif_get_lzw (GifContext *context)
         result = (GifResult) {.type = GIF_RESULT_OKAY_BYTE, .byte_value = read_result.byte_value};
 		bound_flag = TRUE;
 
+
         g_assert (gdk_pixbuf_get_has_alpha (context->frame->pixbuf));
 
-        temp = dest + context->draw_ypos * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
-        *temp = cmap [0][(guchar) v];
-        *(temp+1) = cmap [1][(guchar) v];
-        *(temp+2) = cmap [2][(guchar) v];
-        *(temp+3) = (guchar) ((v == context->gif89.transparent) ? 0 : 255);
+		        if (!(G_MINUCHAR <= v && v <= G_MAXUCHAR)) {
+			        g_warning ("gif: Expected %d <= %d <= %d\n",  G_MINUCHAR, v, G_MAXUCHAR);
+		        }
+		        guchar b = (guchar) v;
+                temp = dest + context->draw_ypos * gdk_pixbuf_get_rowstride (context->frame->pixbuf) + context->draw_xpos * 4;
+                *temp = cmap [0][b];
+                *(temp+1) = cmap [1][b];
+                *(temp+2) = cmap [2][b];
+                *(temp+3) = (b == context->gif89.transparent) ? 0 : 255;
 
 		if (context->prepare_func && context->frame_interlace)
-			gif_fill_in_lines (context, dest, read_result.byte_value);
+    			gif_fill_in_lines (context, dest, b);
 
 		context->draw_xpos++;
 
@@ -1225,6 +1233,7 @@ gif_init (GifContext *context)
 {
 	unsigned char buf[16];
 	char version[4];
+	gint width, height;
 
 	if (!gif_read (context, buf, 6)) {
 		/* Unable to read magic number,
@@ -1269,7 +1278,7 @@ gif_init (GifContext *context)
          * next:     whether colormap is sorted by priority of allocation
          * last 3:   size of colormap
          */
-	context->global_bit_pixel = 2 << (buf[4] & 0x07);
+	context->global_bit_pixel = 2U << (buf[4] & 0x07);
 	context->global_color_resolution = (((buf[4] & 0x70) >> 3) + 1);
         context->has_global_cmap = (buf[4] & 0x80) != 0;
 	context->background_index = buf[5];
@@ -1282,22 +1291,23 @@ gif_init (GifContext *context)
         context->animation->bg_green = 0;
         context->animation->bg_blue = 0;
 
-        context->animation->width = context->width;
-        context->animation->height = context->height;
+        if (!(context->width <= G_MAXINT)) {
+            g_warning ("Expected context->width <= G_MAXINT: %u\n", context->width);
+        }
+        context->animation->width = width = (int) context->width;
+
+        if (!(context->height <= G_MAXINT)) {
+            g_warning ("Expected context->height <= G_MAXINT: %u\n", context->height);
+        }
+        context->animation->height = height = (int) context->height;
 
         if (context->size_func) {
-                gint width, height;
-
-                width = context->width;
-                height = context->height;
-
                 (*context->size_func) (&width, &height, context->user_data);
-
                 if (width == 0 || height == 0) {
-                        g_set_error_literal (context->error,
+                        g_set_error (context->error,
                                              GDK_PIXBUF_ERROR,
                                              GDK_PIXBUF_ERROR_CORRUPT_IMAGE,
-                                             _("Resulting GIF image has zero size"));
+                                             _("Resulting GIF image has zero size: %dx%d"), height, width);
                         GifResult ret = {.type = GIF_RESULT_FAILURE};
                         return ret;
                 }
@@ -1365,7 +1375,7 @@ gif_get_frame_info (GifContext *context)
 		/* if it does, we need to re-read in the colormap,
 		 * the gray_scale, and the bit_pixel */
                 context->frame_cmap_active = TRUE;
-		context->frame_bit_pixel = 1 << ((buf[8] & 0x07) + 1);
+		context->frame_bit_pixel = 1U << ((buf[8] & 0x07) + 1);
 		gif_set_get_colormap2 (context);
 		return (GifResult) {.type = GIF_RESULT_OKAY};
 	}
