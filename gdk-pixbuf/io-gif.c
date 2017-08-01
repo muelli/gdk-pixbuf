@@ -762,7 +762,7 @@ lzw_read_byte (GifContext *context)
 	printf ("Stopped loop with status: %d\n", r.type);
 	g_assert (r.type != GIF_RESULT_OKAY);
 
-    GifResult ret = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = code};
+    GifResult ret = {.type = r.type, .byte_value = code};
 	g_assert (0 <= ret.byte_value);
 	printf ("lzw_read_byte: Returning %d\n", ret.byte_value);
 	g_assert (ret.type != GIF_RESULT_OKAY_BYTE  ||  ret.byte_value <= 255);
@@ -1525,7 +1525,7 @@ gif_main_loop (GifContext *context)
 			// Hrm. Or do we return a byte with "0"..?
 			goto done;
 		};
-	} while ((retval.type == GIF_RESULT_OKAY) || (retval.type == GIF_RESULT_TO_MAINLOOP));
+	} while ((retval.type == GIF_RESULT_OKAY) || (retval.type == GIF_RESULT_OKAY_BYTE  &&  retval.byte_value == 0) || (retval.type == GIF_RESULT_TO_MAINLOOP));
  done:
 	return retval;
 }
