@@ -59,6 +59,7 @@ test_fail_size (GFile *file,
 
   for (i = 0; i < contents_length; i += chunk_size)
     {
+      printf ("Feeding byte %d\n", i);
       success = gdk_pixbuf_loader_write (loader, &contents[i], MIN(chunk_size, contents_length - i), &error);
       if (!success)
         {

@@ -870,6 +870,7 @@ gif_get_lzw (GifContext *context)
 	gboolean bound_flag;
 	gint first_pass; /* bounds for emitting the area_updated signal */
 	gint v;
+	GifResult result;
 
 	if (context->frame == NULL) {
                 context->frame = g_new (GdkPixbufFrame, 1);
@@ -1035,9 +1036,11 @@ gif_get_lzw (GifContext *context)
 
 		GifResult read_result = lzw_read_byte (context);
 		if (read_result.type != GIF_RESULT_OKAY_BYTE) {
+			result = read_result;
 			goto finished_data;
 		}
-        v = read_result.byte_value;
+		v = read_result.byte_value;
+        result = (GifResult) {.type = GIF_RESULT_OKAY_BYTE, .byte_value = read_result.byte_value};
 		bound_flag = TRUE;
 
         g_assert (gdk_pixbuf_get_has_alpha (context->frame->pixbuf));
@@ -1049,7 +1052,7 @@ gif_get_lzw (GifContext *context)
         *(temp+3) = (guchar) ((v == context->gif89.transparent) ? 0 : 255);
 
 		if (context->prepare_func && context->frame_interlace)
-			gif_fill_in_lines (context, dest, v);
+			gif_fill_in_lines (context, dest, read_result.byte_value);
 
 		context->draw_xpos++;
 
@@ -1104,9 +1107,9 @@ gif_get_lzw (GifContext *context)
 
  done:
 
-        context->state = GIF_GET_NEXT_STEP;
+        context->state = GIF_GET_NEXT_STEP; 
 
-        v = 0;
+        result = (GifResult) {.type = GIF_RESULT_OKAY_BYTE, .byte_value = 0};
 
  finished_data:
 
@@ -1153,8 +1156,8 @@ gif_get_lzw (GifContext *context)
                         context->state =  GIF_DONE;
 	}
 
-	GifResult res = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = v};
-        return res;
+	//GifResult res = {.type = GIF_RESULT_OKAY_BYTE, .byte_value = v};
+        return result;
 }
 
 static void
@@ -1185,6 +1188,7 @@ gif_prepare_lzw (GifContext *context)
 	context->lzw_code_size = context->lzw_set_code_size + 1;
 	context->lzw_clear_code = 1 << context->lzw_set_code_size;
 	context->lzw_end_code = context->lzw_clear_code + 1;
+	printf ("end code: %d\n", context->lzw_end_code);
 	context->lzw_max_code_size = 2 * context->lzw_clear_code;
 	context->lzw_max_code = context->lzw_clear_code + 2;
 	context->lzw_fresh = TRUE;
@@ -1411,7 +1415,7 @@ gif_get_next_step (GifContext *context)
 }
 
 
-#define LOG(x) /* g_print ("%s: %s\n", G_STRLOC, x); */
+#define LOG(x) g_print ("%s: %s\n", G_STRLOC, x);
 
 
 
@@ -1483,6 +1487,7 @@ gif_main_loop (GifContext *context)
                         LOG("done\n");
                         /* fall through */
 		default:
+		    g_assert_not_reached ();
 			retval = (GifResult) {.type = GIF_RESULT_OKAY};
 			goto done;
 		};
