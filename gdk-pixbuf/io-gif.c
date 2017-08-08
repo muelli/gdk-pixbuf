@@ -658,8 +658,8 @@ lzw_read_byte (GifContext *context)
 
         GifResult r;
 	//printf ("lzw_code_size: %d\n", context->lzw_code_size);
-	while ((r = get_code (context, context->lzw_code_size)).type == GIF_RESULT_OKAY_BYTE) {
-		code = r.byte_value;
+	while (((r = get_code (context, context->lzw_code_size)).type == GIF_RESULT_OKAY_BYTE)
+	    && ((code = r.byte_value) >= 0)) {
 		printf ("got code: %d\n", code);
 		g_assert (code >= 0);
 		if (code == context->lzw_clear_code) {
