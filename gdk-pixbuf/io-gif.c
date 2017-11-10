@@ -589,20 +589,18 @@ set_gif_lzw_clear_code (GifContext *context)
 static GifResult
 gif_lzw_clear_code (GifContext *context)
 {
-	GifResult code;
+	GifResult result;
 
-	code = get_code (context, context->lzw_code_size);
-	if (code.type == GIF_RESULT_TO_MAINLOOP) {
-                GifResult result = {.type = GIF_RESULT_OKAY};
-		return result;
-        }
+	result = get_code (context, context->lzw_code_size);
+	if (result.type == GIF_RESULT_TO_MAINLOOP) {
+        return (GifResult) {.type = GIF_RESULT_OKAY};
+    }
 
-    g_assert (code.type == GIF_RESULT_OKAY_BYTE);
-	context->lzw_firstcode = context->lzw_oldcode = code.byte_value;
-	context->lzw_code_pending = code.byte_value;
+    g_assert (result.type == GIF_RESULT_OKAY_BYTE);
+	context->lzw_firstcode = context->lzw_oldcode = result.byte_value;
+	context->lzw_code_pending = result.byte_value;
 	context->state = GIF_GET_LZW;
-    GifResult result = {.type = GIF_RESULT_OKAY};
-    return result;
+    return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
 #define CHECK_LZW_SP() G_STMT_START {                                           \
