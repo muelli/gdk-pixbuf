@@ -551,6 +551,10 @@ gif_lzw_fill_buffer (GifContext *context)
 	return (GifResult) {.type = GIF_RESULT_OKAY};
 }
 
+
+/*
+ Is either returning GIF_RESULT_TO_MAINLOOP or GIF_RESULT_OKAY_BYTE
+*/
 static GifResult
 get_code (GifContext *context,
 	  int   code_size)
@@ -758,13 +762,15 @@ lzw_read_byte (GifContext *context)
 		}
 	}
 	printf ("Stopped loop with status: %d\n", r.type);
-	g_assert (r.type != GIF_RESULT_OKAY);
-
-    GifResult ret = {.type = r.type, .byte_value = code};
-	g_assert (0 <= ret.byte_value);
-	printf ("lzw_read_byte: Returning %d\n", ret.byte_value);
-	g_assert (ret.type != GIF_RESULT_OKAY_BYTE  ||  ret.byte_value <= 255);
-	return ret;
+	// g_assert (r.type != GIF_RESULT_OKAY);
+	if (r.type == GIF_RESULT_TO_MAINLOOP) {
+	  return r;
+	} else if (r.type == GIF_RESULT_OKAY_BYTE) {
+ 	  return (GifResult) {.type = r.type, .byte_value = code};
+	} else {
+	  /* We are expecting get_code to return either GIF_RESULT_TO_MAINLOOP or GIF_RESULT_OKAY_BYTE */
+          g_assert_not_reached ();
+	}
 }
 
 static void
