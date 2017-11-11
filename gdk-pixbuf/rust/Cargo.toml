@@ -1,0 +1,15 @@
+[package]
+name = "rust"
+version = "0.1.0"
+authors = ["Tobias Mueller <muelli@cryptobitch.de>"]
+
+
+[lib]
+name = "pixbufloader_gif_internals"
+crate-type = ["staticlib"]
+
+[profile.release]
+lto = true
+
+
+[dependencies]

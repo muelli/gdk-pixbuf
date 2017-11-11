@@ -5,6 +5,18 @@ INTROSPECTION_SCANNER_ENV = CC="$(CC)"
 
 SUBDIRS = pixops
 
+if DEBUG_RELEASE
+CARGO_RELEASE_ARGS=
+else
+CARGO_RELEASE_ARGS=--release
+endif
+
+# FIXME: Fix up including the TOML file somehwere
+CARGO_VERBOSE = $(cargo_verbose_$(V))
+cargo_verbose_ = $(cargo_verbose_$(AM_DEFAULT_VERBOSITY))
+cargo_verbose_0 =
+cargo_verbose_1 = --verbose
+
 if PLATFORM_WIN32
 no_undefined = -no-undefined
 endif
@@ -47,8 +59,14 @@ libpixbufloader_bmp_la_LIBADD = $(module_libs)
 #
 libstatic_pixbufloader_gif_la_SOURCES = io-gif.c io-gif-animation.c io-gif-animation.h
 libpixbufloader_gif_la_SOURCES = io-gif.c io-gif-animation.c io-gif-animation.h
+libpixbufloader_gif_la_RUST_SOURCES = rust/src/lib.rs
+libpixbufloader_gif_RUST_LIB=@abs_top_builddir@/gdk-pixbuf/rust/target/@RUST_TARGET_SUBDIR@/libpixbufloader_gif_internals.a
 libpixbufloader_gif_la_LDFLAGS = -avoid-version -module $(no_undefined)
-libpixbufloader_gif_la_LIBADD = $(module_libs)
+libpixbufloader_gif_la_LIBADD = $(module_libs)  $(libpixbufloader_gif_RUST_LIB)
+
+@abs_top_builddir@/gdk-pixbuf/rust/target/@RUST_TARGET_SUBDIR@/libpixbufloader_gif_internals.a: $(libpixbufloader_gif_la_RUST_SOURCES)
+	cd $(top_srcdir)/gdk-pixbuf/rust && \
+	CARGO_TARGET_DIR=@abs_top_builddir@/gdk-pixbuf/rust/target cargo build $(CARGO_VERBOSE) $(CARGO_RELEASE_ARGS)
 
 #
 # The ICO loader
@@ -586,8 +604,13 @@ distclean-local:
 	  rm -f $(MAINTAINERCLEANFILES); \
 	fi
 
+RUST_EXTRA =					\
+	rust/Cargo.lock
+
+
 EXTRA_DIST =					\
-        gdk-pixbuf-csource.1			\
+	$(RUST_EXTRA)			\
+	gdk-pixbuf-csource.1			\
 	makefile.msc				\
 	gdk_pixbuf.rc				\
 	gdk-pixbuf-marshal.c			\
