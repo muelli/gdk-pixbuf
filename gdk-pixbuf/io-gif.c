@@ -79,7 +79,7 @@
 typedef unsigned char CMap[3][MAXCOLORMAPSIZE];
 
 /* Possible states we can be in. */
-enum {
+typedef enum _GifState {
 	GIF_START,
 	GIF_GET_COLORMAP,
 	GIF_GET_NEXT_STEP,
@@ -91,7 +91,7 @@ enum {
 	GIF_LZW_CLEAR_CODE,
 	GIF_GET_LZW,
 	GIF_DONE
-};
+} GifState;
 
 
 typedef enum _GifResultType
@@ -125,7 +125,7 @@ struct _Gif89
 typedef struct _GifContext GifContext;
 struct _GifContext
 {
-	int state; /* really only relevant for progressive loading */
+	GifState state; /* really only relevant for progressive loading */
 	unsigned int width;
 	unsigned int height;
 
@@ -178,7 +178,7 @@ struct _GifContext
 	guchar block_buf[280];
 	gint block_ptr;
 
-	int old_state; /* used by lzw_fill buffer */
+	GifState old_state; /* used by lzw_fill buffer */
 	/* get_code context */
 	int code_curbit;
 	int code_lastbit;
